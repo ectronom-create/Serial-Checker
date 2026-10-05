@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Serial Number Checker – Batches</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:Arial,Helvetica,sans-serif;background:#f4f7fb;color:#1f2937}
+.container{max-width:960px;margin:30px auto;padding:20px}
+.card{background:#fff;border-radius:16px;padding:26px;box-shadow:0 8px 30px rgba(0,0,0,.08);margin-bottom:20px}
+h1{margin:0 0 6px;text-align:center} h2{margin:0 0 14px;font-size:18px}
+.subtitle{text-align:center;color:#6b7280;margin-bottom:6px}
+label{display:block;font-weight:700;margin:16px 0 8px}
+input[type=text],textarea{width:100%;border:1px solid #d1d5db;border-radius:10px;padding:14px;font-size:16px;outline:none}
+input:focus,textarea:focus{border-color:#2563eb}
+textarea{min-height:120px;resize:vertical}
+.buttons{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}
+button{border:0;border-radius:10px;padding:11px 18px;font-size:14px;font-weight:700;cursor:pointer}
+.primary{background:#2563eb;color:#fff}.secondary{background:#e5e7eb;color:#111827}.danger{background:#fee2e2;color:#b91c1c}
+button:hover{opacity:.9}
+.batches{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+.batch{border:2px dashed #d1d5db;border-radius:12px;padding:14px;text-align:center;background:#f9fafb}
+.batch.loaded{border:2px solid #22c55e;background:#f0fdf4}
+.batch h3{margin:0 0 6px}
+.batch .meta{font-size:12px;color:#6b7280;min-height:34px;word-break:break-all}
+.batch .count{font-size:22px;font-weight:800;margin:4px 0}
+.batch button{width:100%;margin-top:6px;padding:9px;font-size:13px}
+.hint{font-size:13px;color:#6b7280;margin-top:12px;text-align:center}
+.msg{margin-top:12px;padding:10px;border-radius:10px;background:#eff6ff;color:#1d4ed8;text-align:center;font-size:14px;display:none}
+.msg.err{background:#fee2e2;color:#b91c1c}
+.result{margin-top:20px;padding:20px;border-radius:12px;text-align:center;display:none}
+.result .big{font-size:30px;font-weight:800}
+.result .sub{margin-top:6px;font-size:16px;font-weight:700}
+.pass{background:#dcfce7;color:#15803d;border:2px solid #22c55e}
+.reject{background:#fee2e2;color:#b91c1c;border:2px solid #ef4444}
+.rec{margin-top:12px;font-size:13px;font-weight:400;color:#1f2937;background:#fff;border-radius:8px;overflow:auto}
+.rec table{margin:0}
+.stats{display:none;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:20px}
+.stat{padding:14px;background:#f9fafb;border-radius:10px;text-align:center}
+.stat strong{display:block;font-size:24px}
+table{width:100%;border-collapse:collapse;margin-top:16px}
+th,td{padding:10px;border-bottom:1px solid #e5e7eb;text-align:left;font-size:14px}
+th{background:#f9fafb}
+.status-pass{color:#15803d;font-weight:800}.status-reject{color:#b91c1c;font-weight:800}
+.drop{border:2px dashed #93c5fd;background:#eff6ff;border-radius:14px;padding:28px;text-align:center;cursor:pointer}
+.drop.over{background:#dbeafe;border-color:#2563eb}
+.drop b{font-size:18px;display:block;margin-bottom:6px}
+.files{margin-top:16px}
+.frow{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid #e5e7eb;border-radius:10px;margin-bottom:8px;background:#f0fdf4}
+.frow .nm{font-weight:800;min-width:90px}.frow .fi{flex:1;font-size:13px;color:#4b5563;word-break:break-all}
+.frow button{padding:7px 12px;font-size:12px}
+@media(max-width:700px){.batches{grid-template-columns:1fr 1fr}.stats{grid-template-columns:1fr}.container{padding:10px}}
+</style>
+</head>
+<body>
+<div class="container">
+
+<div class="card">
+  <h1>Serial Number Checker</h1>
+  <div class="subtitle">Upload one or more files — each file is saved as its own batch. Scans are matched against all 4 serial columns.</div>
+  <div class="hint" style="margin:0 0 16px">Columns: Serial Number Palette · Box Serial Number · Factory Serial Number · Serial Number</div>
+  <div class="drop" id="drop"><b>⬆ Upload files here</b>Click or drag &amp; drop one or more files (.xlsx, .xls, .csv)</div>
+  <input type="file" id="fileInput" accept=".xlsx,.xls,.csv" multiple style="display:none">
+  <div class="files" id="files"></div>
+  <div class="msg" id="msg"></div>
+  <div class="hint">Data is saved locally in this browser (IndexedDB). Accepts .xlsx, .xls, .csv — leading zeros are preserved.</div>
+</div>
+
+<div class="card">
+  <h2>Scan / Check</h2>
+  <label for="singleSerial">Single Serial (scan here)</label>
+  <input id="singleSerial" type="text" placeholder="Scan or enter any serial number..." autocomplete="off" autofocus>
+  <div class="buttons">
+    <button class="primary" onclick="checkSingle()">CHECK</button>
+    <button class="secondary" onclick="clearAll()">CLEAR</button>
+  </div>
+  <div id="singleResult" class="result"></div>
+
+  <label for="multipleSerials">Multiple Serial Numbers</label>
+  <textarea id="multipleSerials" placeholder="Enter one serial number per line..."></textarea>
+  <div class="buttons"><button class="primary" onclick="checkMultiple()">CHECK ALL</button></div>
+
+  <div id="stats" class="stats">
+    <div class="stat"><strong id="totalCount">0</strong>Total</div>
+    <div class="stat"><strong id="passCount">0</strong>PASS</div>
+    <div class="stat"><strong id="rejectCount">0</strong>REJECT</div>
+  </div>
+  <table id="resultsTable" style="display:none">
+    <thead><tr><th>Serial Number</th><th>Status</th><th>Batch</th><th>Matched Column</th></tr></thead>
+    <tbody id="resultsBody"></tbody>
+  </table>
+</div>
+</div>
+
+<script>
+const FIELDS=[
+  {key:"pallet",label:"Serial Number Palette",alts:["serialnumberpalette","palletserialnumber","serialnumberpallet","palette","pallet"]},
+  {key:"box",label:"Box Serial Number",alts:["boxserialnumber","box"]},
+  {key:"factory",label:"Factory Serial Number",alts:["factoryserialnumber","factory"]},
+  {key:"serial",label:"Serial Number",alts:["serialnumber","serial","sn"]}
+];
+const ids=()=>Object.keys(batchData).map(Number).sort((a,b)=>a-b);
+const bname=id=>(batchData[id]&&batchData[id].name)||('Batch '+id);
+let index=new Map();      // serial -> [{batch, field, rec}]
+let batchData={};         // id -> {fileName, count, date, rows}
+
+/* ---------- IndexedDB ---------- */
+let dbp=null;
+function db(){
+  if(!dbp) dbp=new Promise((res,rej)=>{
+    const r=indexedDB.open("serialCheckerDB",1);
+    r.onupgradeneeded=()=>r.result.createObjectStore("batches",{keyPath:"id"});
+    r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error);
+  });
+  return dbp;
+}
+async function dbOp(mode,fn){
+  const d=await db();
+  return new Promise((res,rej)=>{
+    const tx=d.transaction("batches",mode); const req=fn(tx.objectStore("batches"));
+    tx.oncomplete=()=>res(req&&req.result); tx.onerror=()=>rej(tx.error);
+  });
+}
+const dbAll=()=>dbOp("readonly",s=>s.getAll());
+const dbPut=v=>dbOp("readwrite",s=>s.put(v));
+const dbDel=id=>dbOp("readwrite",s=>s.delete(id));
+
+/* ---------- Helpers ---------- */
+const norm=v=>String(v==null?"":v).trim().toUpperCase();
+const hnorm=v=>String(v||"").toLowerCase().replace(/[^a-z0-9]/g,"");
+const esc=v=>String(v).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[c]));
+function showMsg(t,err){const m=document.getElementById("msg");m.textContent=t;m.className="msg"+(err?" err":"");m.style.display="block";}
+
+function parseCSV(text){
+  const rows=[];let row=[],cur="",q=false;
+  if(text.charCodeAt(0)===0xFEFF)text=text.slice(1);
+  const delim=(text.split("\n")[0].split(";").length>text.split("\n")[0].split(",").length)?";":",";
+  for(let i=0;i<text.length;i++){
+    const c=text[i];
+    if(q){ if(c=='"'){ if(text[i+1]=='"'){cur+='"';i++;} else q=false;} else cur+=c; }
+    else if(c=='"') q=true;
+    else if(c===delim){row.push(cur);cur="";}
+    else if(c==="\n"||c==="\r"){ if(c==="\r"&&text[i+1]==="\n")i++; row.push(cur);cur=""; rows.push(row);row=[]; }
+    else cur+=c;
+  }
+  if(cur!==""||row.length){row.push(cur);rows.push(row);}
+  return rows;
+}
+
+async function readRows(file){
+  const ext=file.name.split(".").pop().toLowerCase();
+  if(ext==="csv") return parseCSV(await file.text());
+  if(typeof XLSX==="undefined") throw new Error("Excel reader not loaded (no internet). Please save the file as CSV and upload again.");
+  const wb=XLSX.read(await file.arrayBuffer(),{type:"array",cellText:true,cellDates:false});
+  const ws=wb.Sheets[wb.SheetNames[0]];
+  return XLSX.utils.sheet_to_json(ws,{header:1,raw:false,defval:""});
+}
+
+function buildRecords(matrix){
+  if(!matrix.length) throw new Error("File is empty.");
+  // find header row within first 10 rows
+  let hIdx=0,best=-1,map={};
+  for(let r=0;r<Math.min(10,matrix.length);r++){
+    const m={};let n=0;
+    matrix[r].forEach((h,c)=>{
+      const hn=hnorm(h);
+      FIELDS.forEach(f=>{ if(m[f.key]===undefined&&f.alts.includes(hn)){m[f.key]=c;n++;} });
+    });
+    if(n>best){best=n;hIdx=r;map=m;}
+  }
+  if(best<=0){ map={};FIELDS.forEach((f,i)=>map[f.key]=i); hIdx=-1; } // fallback: first 4 columns in order
+  const rows=[];
+  for(let r=hIdx+1;r<matrix.length;r++){
+    const rec={};let any=false;
+    FIELDS.forEach(f=>{
+      const v=map[f.key]===undefined?"":String(matrix[r][map[f.key]]??"").trim();
+      rec[f.key]=v; if(v)any=true;
+    });
+    if(any)rows.push(rec);
+  }
+  const missing=FIELDS.filter(f=>map[f.key]===undefined).map(f=>f.label);
+  return {rows,missing,usedFallback:hIdx===-1};
+}
+
+function rebuildIndex(){
+  index=new Map();
+  ids().forEach(id=>{
+    const b=batchData[id];
+    b.rows.forEach(rec=>FIELDS.forEach(f=>{
+      const v=norm(rec[f.key]); if(!v)return;
+      if(!index.has(v))index.set(v,[]);
+      index.get(v).push({batch:id,field:f.label,rec});
+    }));
+  });
+}
+
+/* ---------- Files UI ---------- */
+function renderBatches(){
+  const el=document.getElementById("files");
+  const list=ids();
+  el.innerHTML=list.length?list.map(id=>{const b=batchData[id];
+    return `<div class="frow"><span class="nm">${esc(bname(id))}</span>
+      <span class="fi">${esc(b.fileName)} · ${b.count.toLocaleString()} rows · ${esc(b.date)}</span>
+      <button class="secondary" onclick="renameBatch(${id})">RENAME</button>
+      <button class="danger" onclick="removeBatch(${id})">DELETE</button></div>`;}).join("")
+    :'<div class="hint">No files uploaded yet.</div>';
+}
+const drop=document.getElementById("drop"),fileInput=document.getElementById("fileInput");
+drop.onclick=()=>{fileInput.value="";fileInput.click();};
+["dragover","dragenter"].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.add("over");}));
+["dragleave","drop"].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.remove("over");}));
+drop.addEventListener("drop",e=>handleFiles(e.dataTransfer.files));
+fileInput.addEventListener("change",e=>handleFiles(e.target.files));
+
+async function handleFiles(fileList){
+  const files=[...fileList]; if(!files.length)return;
+  const notes=[];let bad=false;
+  for(const file of files){
+    try{
+      showMsg("Reading "+file.name+"...");
+      const {rows,missing,usedFallback}=buildRecords(await readRows(file));
+      if(!rows.length)throw new Error("no data rows");
+      const id=(ids().pop()||0)+1;
+      const entry={id,name:file.name.replace(/\.[^.]+$/,""),fileName:file.name,count:rows.length,date:new Date().toLocaleString(),rows};
+      await dbPut(entry);batchData[id]=entry;
+      let t=`${file.name} saved (${rows.length.toLocaleString()} rows)`;
+      if(usedFallback){t+=" – headers not recognised, first 4 columns used";bad=true;}
+      else if(missing.length){t+=" – missing: "+missing.join(", ");bad=true;}
+      notes.push(t);
+    }catch(err){notes.push(file.name+": "+err.message);bad=true;}
+  }
+  rebuildIndex();renderBatches();showMsg(notes.join(" | "),bad);
+}
+async function renameBatch(id){
+  const n=prompt("Batch name:",bname(id)); if(!n||!n.trim())return;
+  batchData[id].name=n.trim(); await dbPut(batchData[id]); rebuildIndex(); renderBatches();
+}
+async function removeBatch(id){
+  if(!confirm("Delete "+bname(id)+"?"))return;
+  await dbDel(id);delete batchData[id];rebuildIndex();renderBatches();showMsg("Deleted.");
+}
+
+/* ---------- Checking ---------- */
+function checkSingle(){
+  const input=document.getElementById("singleSerial"),res=document.getElementById("singleResult");
+  const v=norm(input.value); res.style.display="block";
+  if(!v){res.className="result reject";res.innerHTML='<div class="big">PLEASE ENTER A SERIAL NUMBER</div>';return;}
+  if(!index.size){res.className="result reject";res.innerHTML='<div class="big">NO DATA LOADED</div><div class="sub">Upload a batch file first</div>';input.value="";return;}
+  const hits=index.get(v);
+  if(hits){
+    const h=hits[0];
+    const batches=[...new Set(hits.map(x=>x.batch))].map(b=>bname(b)).join(", ");
+    res.className="result pass";
+    res.innerHTML=`<div class="big">PASS</div><div class="sub">${batches} · ${esc(h.field)}</div>
+      <div class="rec"><table><thead><tr>${FIELDS.map(f=>`<th>${f.label}</th>`).join("")}</tr></thead>
+      <tbody><tr>${FIELDS.map(f=>`<td>${esc(h.rec[f.key]||"")}</td>`).join("")}</tr></tbody></table></div>`;
+  }else{
+    res.className="result reject";res.innerHTML='<div class="big">REJECT</div><div class="sub">Not found in any batch</div>';
+  }
+  input.value="";input.focus();
+}
+function checkMultiple(){
+  const values=document.getElementById("multipleSerials").value.split(/\r?\n/).map(norm).filter(Boolean);
+  const body=document.getElementById("resultsBody");body.innerHTML="";
+  let pass=0,rej=0;
+  values.forEach(v=>{
+    const hits=index.get(v); hits?pass++:rej++;
+    const tr=document.createElement("tr");
+    tr.innerHTML=`<td>${esc(v)}</td><td class="${hits?"status-pass":"status-reject"}">${hits?"PASS":"REJECT"}</td>
+      <td>${hits?[...new Set(hits.map(x=>bname(x.batch)))].join(", "):"-"}</td><td>${hits?esc(hits[0].field):"-"}</td>`;
+    body.appendChild(tr);
+  });
+  totalCount.textContent=values.length;passCount.textContent=pass;rejectCount.textContent=rej;
+  stats.style.display=values.length?"grid":"none";resultsTable.style.display=values.length?"table":"none";
+}
+function clearAll(){
+  singleSerial.value="";multipleSerials.value="";singleResult.style.display="none";
+  stats.style.display="none";resultsTable.style.display="none";resultsBody.innerHTML="";singleSerial.focus();
+}
+singleSerial.addEventListener("keydown",e=>{if(e.key==="Enter")checkSingle();});
+
+/* ---------- Init ---------- */
+(async function(){
+  renderBatches();
+  try{
+    (await dbAll()).forEach(b=>batchData[b.id]=b);
+    rebuildIndex();renderBatches();
+  }catch(e){showMsg("Local database unavailable in this browser: "+e.message,true);}
+})();
+</script>
+</body>
+</html>
